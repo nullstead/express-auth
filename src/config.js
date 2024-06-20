@@ -1,9 +1,6 @@
 const mongoose = require('mongoose');
 const dbURI = 'mongodb+srv://ncc:12345@cluster0.ahve76o.mongodb.net/logreg?retryWrites=true&w=majority&appName=Cluster0';
-const connect = mongoose.connect(dbURI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-});
+const connect = mongoose.connect(dbURI);
 
 connect.then(() => {
     console.log("Database connected successfully!")
@@ -25,7 +22,10 @@ const loginSchema = new mongoose.Schema(
             type: String,
             required: true
         },
-        isVerified: { type: Boolean, default: false }
+        isVerified: { type: Boolean, default: false },
+
+        passwordResetToken: {type: String},
+        passwordResetExpires: {type: Date}
     }, 
     {
         timestamps: true

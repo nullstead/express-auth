@@ -104,6 +104,93 @@ app.get('/signup', (req, res) => {
         });
     }
 
+
+    //send password reset email
+    function sendPasswordResetEmail(user, token) {
+        const url = `http://localhost:3000/newPassword/${token}`;
+        
+        transport.sendMail({
+            to: user.email,
+            subject: 'Password Reset',
+            html: `Click <a href="${url}">here</a> to reset your password.`,
+        });
+    }
+
+
+    // Request password reset get
+    app.get('/resetPassword', async (req, res) => {
+        return res.render('pwd-reset')
+    })
+
+    // Request password reset 
+    app.post('/requestPasswordReset', async (req, res) => {
+        const { email } = req.body;
+
+        try {
+            const user = await User.findOne({ email });
+
+            if (!user) {
+                return res.status(400).send('User not found');
+            }
+
+            // Generate reset token
+            const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '1h' });
+            
+            // Save token and expiration to user
+            user.passwordResetToken = token;
+            user.passwordResetExpires = Date.now() + 3600000; // 1 hour
+            await user.save();
+
+            // Send reset email
+            sendPasswordResetEmail(user, token);
+            // console.log('Password reset email sent')
+            res.send('Password reset email sent');
+        } catch (error) {
+            res.status(500).send('Internal server error');
+        }
+    });
+
+    // Password reset  get - new password
+    app.get('/newPassword/:token', async (req, res) => {
+        const { token } = req.params;
+
+        return res.render('new-pwd', {token})
+    })
+
+    // Password reset  post
+    app.post('/reset-password/:token', async (req, res) => {
+        const { token } = req.params;
+        const { password } = req.body;
+        // console.log(token, password)
+
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            const user = await User.findOne({
+                _id: decoded.userId,
+                passwordResetToken: token,
+                passwordResetExpires: { $gt: Date.now() },
+            });
+
+            if (!user) {
+                return res.status(400).send('Invalid or expired token');
+            }
+
+            // Update password
+            user.password = await bcrypt.hash(password, 10);
+            user.passwordResetToken = undefined;
+            user.passwordResetExpires = undefined;
+            await user.save();
+
+            console.log('Password reset successful')
+            res.redirect('/');
+        } catch (error) {
+            res.status(400).send('Invalid token');
+        }
+    });
+
+
+
+
 //register user
 app.post('/signup', async (req, res) => {
 
