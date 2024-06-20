@@ -3,10 +3,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Home Page</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
 </head>
 <body>
-    <h1 style="text-align: center;">Welcome, <%-username  %></h1>
+    
+    <% if (messages.success) { %>
+        <% messages.success.forEach(function(message) { %>
+            <div style="width: fit-content; margin: auto;" id="flash" class="alert alert-success alert-dismissible fade show">
+                
+                <%= message %>
+            </div>
+        <% }); %>
+    <% } %>
+    
+    <% if (messages.error) { %>
+        <% messages.error.forEach(function(message) { %>
+            <div style="width: fit-content; margin: auto;" id="flash" class="alert alert-danger alert-dismissible fade show">
+                <%= message %>
+            </div>
+        <% }); %>
+    <% } %>
+    
+
+    <h1 style="text-align: center;">Welcome, <%- email %></h1>
 
     <p style="cursor: pointer; border: 2px solid slategrey; width: fit-content;">Please log me out...</p>
 
@@ -23,6 +43,13 @@
             }
         });
     });
+
+    // Auto close alert after 3 seconds
+        setTimeout(() => {
+            const alert = document.getElementById('flash');
+            alert.close();
+        }, 3000);
 </script>
+
 </body>
 </html>

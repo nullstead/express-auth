@@ -3,7 +3,24 @@ const session = require('express-session');
 const MongoDBStore = require('connect-mongodb-session')(session);
 const path = require('path');
 const bcrypt = require('bcrypt');
-const User = require('./config')
+const User = require('./config');
+const flash = require('connect-flash');
+
+
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = 'Mawunayrawo';
+const nodemailer = require('nodemailer');
+
+
+//email sending
+var transport = nodemailer.createTransport({
+    host: "sandbox.smtp.mailtrap.io",
+    port: 2525,
+    auth: {
+      user: "b475e44b48767a",
+      pass: "260b8e91f9eaf5"
+    }
+  });
 
 const port = 3000
 
@@ -11,6 +28,7 @@ const port = 3000
 const app = express();
 app.set('view engine', 'ejs');
 app.use(express.static('assets'))
+
 
 //session store
 const store = new MongoDBStore({
@@ -33,12 +51,19 @@ app.use(session({
     },
 }));
 
+app.use(flash());
+
+app.use((req, res, next) => {
+    res.locals.messages = req.flash();
+    next();
+});
+
 // Middleware to check if user is authenticated
 function isAuthenticated(req, res, next){
     if(req.session.userId){
         return next()
     } else {
-        res.status(404).send('You need to log in first')
+        return res.status(404).send('You need to log in first')
     }
 }
 
@@ -49,6 +74,7 @@ app.use(express.urlencoded({extended: false}))
 
 
 app.get('/', (req, res) => {
+    
     if(req.session.userId){
         res.redirect('/home')
     } else {
@@ -65,23 +91,35 @@ app.get('/signup', (req, res) => {
         res.render('signup')
     }
 
-   
 })
+
+    //email verification
+    function sendVerificationEmail(email, token) {
+        const url = `http://localhost:3000/verify/${token}`;
+        
+        transport.sendMail({
+            to: email,
+            subject: 'Verify your email address',
+            html: `Click <a href="${url}">here</a> to verify your email address.`,
+        });
+    }
 
 //register user
 app.post('/signup', async (req, res) => {
 
+
     const data = {
-        username: req.body.username,
+        email: req.body.email,
         password: req.body.password
     }
 
 
-    //check if username already exists
-    const existingUser = await User.findOne({username: data.username })
+    //check if email already exists
+    const existingUser = await User.findOne({email: data.email })
 
     if(existingUser){
-        res.send('username already exists. Choose another!')
+        res.send('email already exists. Choose another!')
+        return;
     } else {
         //hashpassword
         const saltRounds = 10
@@ -89,18 +127,54 @@ app.post('/signup', async (req, res) => {
         data.password = hashedPassword
         //commit data to db
         const userData = await User.insertMany(data)
-        console.log(userData)
-        res.redirect('/')
+        // console.log(userData)
+        
+        // Generate verification token
+        const token = jwt.sign({ userId: userData[0]._id }, JWT_SECRET, { expiresIn: '1d' });
+
+        // Send verification email
+        sendVerificationEmail(userData[0].email, token)
+        console.log(userData[0].email)
+        console.log(userData[0]._id)
+
+        res.status(201).send('Registration successful. Check your email to verify your account.');
+        // res.redirect('/')
+        return;
     }
 
     
 })  
 
 
+// Verification route
+app.get('/verify/:token', async (req, res) => {
+    const { token } = req.params;
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await User.findById(decoded.userId);
+
+        if (!user) {
+            return res.status(400).send('Invalid token or user does not exist');
+        }
+
+        user.isVerified = true;
+        await user.save();
+
+        console.log('Email verified successfully');
+        res.redirect('/')
+
+    } catch (error) {
+        res.status(400).send('Invalid token');
+    }
+});
+
+
+
 //log user in
 // app.post('/login', (req, res) => {
 
-//     const check = User.findOne({username: req.body.username})
+//     const check = User.findOne({email: req.body.email})
 //     check.then((result) => {
 //         console.log(result)
 //     })
@@ -112,14 +186,19 @@ app.post('/signup', async (req, res) => {
 
 app.post('/login', async (req, res) => {
 
-    const {username, password} = req.body
+    const {email, password} = req.body
     try {
 
-        const check = await User.findOne({username: username})
+        const check = await User.findOne({email: email})
 
         if(!check){
-            res.status(401).send('Username can\'t be found!')
+            res.status(401).send('Email can\'t be found!')
             console.log('no user')
+            return;
+
+        } else if (!check.isVerified) {
+            console.log('Email not verified')
+            return res.redirect('/');
 
         } else {
             console.log('user found')
@@ -127,13 +206,16 @@ app.post('/login', async (req, res) => {
             if(passwordVerify){
                 // Store user ID in session
                 req.session.userId = check._id
-                req.session.username = check.username
+                req.session.email = check.email
 
+                req.flash('success', 'Login successful!');
                 res.redirect('/home')
                 console.log('logged in!')
+                return;
             }else {
                 res.status(401).send('wrong password')
                 console.log('wrong password')
+                return;
             }
         }
 
@@ -162,7 +244,8 @@ app.post('/logout', (req, res) => {
 
 //protected route:home page
 app.get('/home', isAuthenticated, (req, res) => {
-    res.render('home', {username: req.session.username})
+    
+    res.render('home', {email: req.session.email})
 })
 
 
